@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, exportJSON, importJSON, type Person } from './db';
+import { STATUSES, recordStatus, db, exportJSON, importJSON, type Person } from './db';
 import InstallBanner from './InstallBanner';
+import Ministry from './Ministry';
+import MonthSummary from './MonthSummary';
 
 type View =
   | { name: 'list' }
@@ -46,6 +48,7 @@ function ListPage({ go }: { go: (v: View) => void }) {
   return (
     <>
       <InstallBanner />
+      <Ministry />
       <header className="bar">
         <h1>People</h1>
         <button className="primary" onClick={() => go({ name: 'form' })}>
@@ -71,12 +74,15 @@ function ListPage({ go }: { go: (v: View) => void }) {
             <li key={p.id}>
               <button onClick={() => go({ name: 'detail', id: p.id! })}>
                 <span className="name">{p.name}</span>
+                {p.status && <span className={`pill ${p.status.toLowerCase()}`}>{p.status}</span>}
                 {p.availability && <span className="sub">{p.availability}</span>}
               </button>
             </li>
           ))}
         </ul>
       )}
+
+      <MonthSummary />
 
       <footer className="backup">
         <button onClick={exportJSON}>Export backup</button>
@@ -101,7 +107,10 @@ function DetailPage({ id, go }: { id: number; go: (v: View) => void }) {
 
   async function onDelete() {
     if (!confirm(`Delete ${p!.name}? This can't be undone.`)) return;
-    await db.people.delete(id);
+    await db.transaction('rw', db.people, db.statusEvents, async () => {
+      await db.people.delete(id);
+      await db.statusEvents.where({ personId: id }).delete();
+    });
     go({ name: 'list' });
   }
 
@@ -115,6 +124,7 @@ function DetailPage({ id, go }: { id: number; go: (v: View) => void }) {
 
       <h2 className="title">{p.name}</h2>
       <dl className="details">
+        <Row label="Status" value={p.status ?? ''} />
         <Row label="Date" value={formatDate(p.date)} />
         <Row label="Availability" value={p.availability} />
         <Row label="Address" value={p.address} />
@@ -147,6 +157,7 @@ function Row({ label, value }: { label: string; value: string }) {
 /* ---------- Create / Edit form ---------- */
 const empty = {
   name: '',
+  status: STATUSES[0] as string,
   date: new Date().toISOString().slice(0, 10),
   availability: '',
   address: '',
@@ -173,6 +184,7 @@ function Form({
 }) {
   const [f, setF] = useState({
     name: initial.name,
+    status: initial.status ?? STATUSES[0],
     date: initial.date,
     availability: initial.availability,
     address: initial.address,
@@ -192,9 +204,11 @@ function Form({
     const now = Date.now();
     if (id) {
       await db.people.update(id, { ...data, updatedAt: now });
+      if (data.status !== initial.status) await recordStatus(id, data.status);
       go({ name: 'detail', id });
     } else {
       const newId = await db.people.add({ ...data, createdAt: now, updatedAt: now });
+      await recordStatus(newId, data.status);
       go({ name: 'detail', id: newId });
     }
   }
@@ -216,6 +230,23 @@ function Form({
         <label>
           Name *
           <input value={f.name} onChange={set('name')} required autoFocus={!id} />
+        </label>
+        <label>
+          Status
+          <div className="segmented" role="radiogroup">
+            {STATUSES.map((t) => (
+              <button
+                key={t}
+                type="button"
+                role="radio"
+                aria-checked={f.status === t}
+                className={f.status === t ? 'on' : ''}
+                onClick={() => setF({ ...f, status: t })}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
         </label>
         <label>
           Date
