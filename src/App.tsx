@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { AVAILABILITY, db, exportJSON, importJSON, type Person } from './db';
+import { db, exportJSON, importJSON, type Person } from './db';
 import InstallBanner from './InstallBanner';
 
 type View =
@@ -71,9 +71,7 @@ function ListPage({ go }: { go: (v: View) => void }) {
             <li key={p.id}>
               <button onClick={() => go({ name: 'detail', id: p.id! })}>
                 <span className="name">{p.name}</span>
-                <span className={`pill ${pillClass(p.availability)}`}>
-                  {p.availability}
-                </span>
+                {p.availability && <span className="sub">{p.availability}</span>}
               </button>
             </li>
           ))}
@@ -150,7 +148,7 @@ function Row({ label, value }: { label: string; value: string }) {
 const empty = {
   name: '',
   date: new Date().toISOString().slice(0, 10),
-  availability: AVAILABILITY[0] as string,
+  availability: '',
   address: '',
   latestTopic: '',
   publication: '',
@@ -225,11 +223,12 @@ function Form({
         </label>
         <label>
           Availability
-          <select value={f.availability} onChange={set('availability')}>
-            {AVAILABILITY.map((a) => (
-              <option key={a}>{a}</option>
-            ))}
-          </select>
+          <textarea
+            rows={2}
+            value={f.availability}
+            onChange={set('availability')}
+            placeholder="e.g. Weekdays after 3pm, not available Nov 20–25"
+          />
         </label>
         <label>
           Address
@@ -256,10 +255,4 @@ function formatDate(d: string) {
   if (!d) return '';
   const dt = new Date(d + 'T00:00:00');
   return dt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-function pillClass(a: string) {
-  if (a === 'Available') return 'ok';
-  if (a === 'Tentative') return 'warn';
-  return 'no';
 }

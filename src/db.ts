@@ -1,7 +1,5 @@
 import Dexie, { type Table } from 'dexie';
 
-export const AVAILABILITY = ['Available', 'Tentative', 'Not available'] as const;
-
 export interface Person {
   id?: number;
   name: string;

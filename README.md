@@ -31,6 +31,5 @@ Paste your URL into https://www.pwabuilder.com → Android → download the pack
 - Deleting the home screen app deletes its data — export regularly.
 
 ## Customize
-- Availability options: `AVAILABILITY` in `src/db.ts`.
 - Adding a new field: add it to `Person` in `src/db.ts` and to the form/details in `src/App.tsx`.
   Only bump `this.version(...)` if you need a new **indexed** field.

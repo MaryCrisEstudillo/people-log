@@ -57,7 +57,12 @@ button.block { width: 100%; padding: 14px; margin-top: 8px; }
   width: 100%; display: flex; justify-content: space-between; align-items: center;
   border-radius: 0; padding: 14px 16px; text-align: left; background: none;
 }
-.list .name { font-weight: 500; }
+.list button { gap: 12px; }
+.list .name { font-weight: 500; flex-shrink: 0; }
+.list .sub {
+  color: var(--muted); font-size: .85rem; text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
 
 .pill { font-size: .75rem; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
 .pill.ok { background: #d9f5e3; color: #146c34; }
