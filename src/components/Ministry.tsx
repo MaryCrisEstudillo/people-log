@@ -1,36 +1,33 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, formatHM, ministryTotalForMonth, parseHM, toHM, todayISO } from './db';
+import { DEFAULT_GOAL_MIN, db, settingKeys } from '../db';
+import { ministryForMonth } from '../lib/records';
+import { currentMonth, formatHM, monthName, parseHM, toHM, todayISO } from '../lib/time';
 
-const DEFAULT_GOAL_MIN = 30 * 60;
+type Editing = null | 'total' | 'goal';
 
+/** Ministry time card: add today's time, see today/total/goal/remaining. Total resets monthly. */
 export default function Ministry() {
   const today = todayISO();
-  const month = today.slice(0, 7); // YYYY-MM — total resets each month
-  const adjustKey = `totalAdjustMin:${month}`;
-  const monthLabel = new Date(today + 'T00:00:00').toLocaleDateString(undefined, {
-    month: 'long',
-    year: 'numeric',
-  });
+  const month = currentMonth();
 
   const data = useLiveQuery(async () => {
-    const [{ logs, logged, adjust }, goal] = await Promise.all([
-      ministryTotalForMonth(month),
-      db.settings.get('goalMin'),
+    const [{ logs, logged, total }, goal] = await Promise.all([
+      ministryForMonth(month),
+      db.settings.get(settingKeys.goal),
     ]);
-    const todayMin = logs.filter((l) => l.date === today).reduce((s, l) => s + l.minutes, 0);
-    const total = logged + adjust;
+    const todayLogs = logs.filter((l) => l.date === today);
     return {
       logged,
-      todayMin,
       total,
       goal: goal?.value ?? DEFAULT_GOAL_MIN,
-      lastToday: logs.filter((l) => l.date === today).at(-1),
+      todayMin: todayLogs.reduce((sum, l) => sum + l.minutes, 0),
+      lastToday: todayLogs.at(-1),
     };
-  }, [today, month, adjustKey]);
+  }, [today, month]);
 
   const [input, setInput] = useState('');
-  const [editing, setEditing] = useState<null | 'total' | 'goal'>(null);
+  const [editing, setEditing] = useState<Editing>(null);
   const [editVal, setEditVal] = useState('');
 
   if (!data) return null;
@@ -41,11 +38,12 @@ export default function Ministry() {
 
   const parsed = parseHM(input);
   const inputInvalid = input.trim() !== '' && parsed === null;
+  const editParsed = parseHM(editVal);
 
   async function add() {
     if (!parsed) return;
+    setInput(''); // clear first so a double tap can't add twice
     await db.ministryLogs.add({ date: today, minutes: parsed, createdAt: Date.now() });
-    setInput('');
   }
 
   async function undoLast() {
@@ -54,29 +52,36 @@ export default function Ministry() {
     await db.ministryLogs.delete(lastToday.id);
   }
 
-  function startEdit(which: 'total' | 'goal') {
+  function startEdit(which: Exclude<Editing, null>) {
     setEditing(which);
     setEditVal(toHM(which === 'total' ? total : goal));
   }
 
-  const editParsed = parseHM(editVal);
-
   async function saveEdit() {
     if (editParsed === null) return;
     if (editing === 'total') {
-      // Keep the log history; store the difference as this month's adjustment
-      await db.settings.put({ key: adjustKey, value: editParsed - logged });
+      // Keep the log history; store the difference as this month's correction
+      await db.settings.put({ key: settingKeys.totalAdjust(month), value: editParsed - logged });
     } else if (editing === 'goal') {
-      await db.settings.put({ key: 'goalMin', value: editParsed });
+      await db.settings.put({ key: settingKeys.goal, value: editParsed });
     }
     setEditing(null);
   }
 
+  const editProps = {
+    editVal,
+    setEditVal,
+    valid: editParsed !== null,
+    onSave: saveEdit,
+    onCancel: () => setEditing(null),
+  };
+
   return (
-    <section className="ministry">
-      <h2>
-        Ministry total <span className="m-month">{monthLabel}</span>
-      </h2>
+    <section className="card ministry">
+      <div className="card-head">
+        <h2>Ministry total</h2>
+        <span className="card-sub">{monthName(month, true)}</span>
+      </div>
 
       <div className="m-add">
         <div className="m-input">
@@ -89,7 +94,7 @@ export default function Ministry() {
             onKeyDown={(e) => e.key === 'Enter' && add()}
             aria-invalid={inputInvalid}
           />
-          <small className={inputInvalid ? 'err' : ''}>
+          <small className={inputInvalid ? 'err' : undefined}>
             {inputInvalid
               ? 'Use hours.minutes — minutes must be 00–59'
               : parsed
@@ -114,34 +119,23 @@ export default function Ministry() {
             )}
           </dd>
         </div>
-
         <EditableRow
           label="Ministry total"
           value={formatHM(total)}
           isEditing={editing === 'total'}
-          editVal={editVal}
-          setEditVal={setEditVal}
-          valid={editParsed !== null}
           onEdit={() => startEdit('total')}
-          onSave={saveEdit}
-          onCancel={() => setEditing(null)}
+          {...editProps}
         />
-
         <EditableRow
           label="Ministry goal"
           value={formatHM(goal)}
           isEditing={editing === 'goal'}
-          editVal={editVal}
-          setEditVal={setEditVal}
-          valid={editParsed !== null}
           onEdit={() => startEdit('goal')}
-          onSave={saveEdit}
-          onCancel={() => setEditing(null)}
+          {...editProps}
         />
-
         <div>
           <dt>Remaining</dt>
-          <dd className={remaining === 0 ? 'done' : ''}>
+          <dd className={remaining === 0 ? 'done' : undefined}>
             {remaining === 0 ? 'Goal reached 🎉' : formatHM(remaining)}
           </dd>
         </div>
@@ -154,7 +148,17 @@ export default function Ministry() {
   );
 }
 
-function EditableRow(props: {
+function EditableRow({
+  label,
+  value,
+  isEditing,
+  editVal,
+  setEditVal,
+  valid,
+  onEdit,
+  onSave,
+  onCancel,
+}: {
   label: string;
   value: string;
   isEditing: boolean;
@@ -165,7 +169,6 @@ function EditableRow(props: {
   onSave: () => void;
   onCancel: () => void;
 }) {
-  const { label, value, isEditing, editVal, setEditVal, valid, onEdit, onSave, onCancel } = props;
   return (
     <div>
       <dt>{label}</dt>
