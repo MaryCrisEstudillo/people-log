@@ -13,9 +13,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'People Log',
-        short_name: 'People',
-        description: 'Personal records stored only on this device',
+        name: 'Ministry Tracker',
+        short_name: 'Ministry Tracker',
+        description: 'Ministry time and personal records, stored only on this device',
         display: 'standalone',
         start_url: base,
         scope: base,

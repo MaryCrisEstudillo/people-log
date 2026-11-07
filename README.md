@@ -1,4 +1,4 @@
-# People Log
+# Ministry Tracker
 
 Personal records + ministry time tracker (PWA). All data is stored **only on the device** (IndexedDB via Dexie). No backend, works offline.
 
